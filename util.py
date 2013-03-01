@@ -49,13 +49,28 @@ def _pre_input_func(default):
 	readline.redisplay()
 	sys.stdout.flush()
 
-def get_line(prompt = "> ", default = ""):
+def get_line(prompt = "> ", default = "", completer = None):
 	readline.parse_and_bind("tab: complete")
-	readline.set_completer()
+	readline.set_completer(completer)
+	readline.set_completer_delims("/")
 	readline.set_pre_input_hook(lambda: _pre_input_func(default))
 	line = input(prompt)
 	readline.set_pre_input_hook()
 	return line
+
+class filename_completer():
+	def completer(self, text, state):
+		if state == 0:
+			try:
+				dirname = os.path.dirname(readline.get_line_buffer())
+				self.complist = list(filter(lambda fname: fname.startswith(text), map(lambda fname: os.path.isdir(dirname + '/' + fname) and fname + '/' or fname, os.listdir(dirname))))
+			except Exception as e:
+				self.complist = []
+
+		try:
+			return self.complist[state]
+		except:
+			return None
 
 class _confirm_class:
 	def __init__(self, question, default_answer, path, changeable, always_yes):
@@ -85,12 +100,21 @@ class _confirm_class:
 			self.val = True
 		else:
 			self.options.append(("change", self.option_change))
-			self.val, self.valname, self.valchecker = self.changeable
+			self.val, self.valname, self.valchecker, self.valcompleter = self.changeable
 
 		self.options.append(("quit", self.option_quit))
 
 		if self.default_answer not in map(lambda x: x[0], self.options):
 			self.default_answer = ""
+
+	def option_completer(self, text, state):
+		if state == 0:
+			self.complist = list(filter(lambda on: on.startswith(text), map(lambda o: o[0], self.options)))
+
+		try:
+			return self.complist[state]
+		except:
+			return None
 
 	def option_yes(self):
 		return self.val
@@ -114,7 +138,7 @@ class _confirm_class:
 
 	def option_change(self):
 		try:
-			newval = get_line(self.valname + ": ", self.val)
+			newval = get_line(self.valname + ": ", self.val, self.valcompleter)
 			newvalckres = self.valchecker(newval)
 			if newvalckres != True:
 				print("Illegal value: " + str(newvalckres))
@@ -122,8 +146,10 @@ class _confirm_class:
 				self.val = newval
 
 		except KeyboardInterrupt:
+			print("")
 			pass
 		except EOFError:
+			print("")
 			pass
 
 		return None
@@ -159,11 +185,13 @@ class _confirm_class:
 
 	def run_once(self):
 		try:
-			answer = get_line(self.get_prompt(), "")
+			answer = get_line(self.get_prompt(), "", self.option_completer)
 		except KeyboardInterrupt:
 			answer = "quit"
+			print("")
 		except EOFError:
 			answer = "quit"
+			print("")
 
 		if answer[-1:] == '\n':
 			answer = answer[:-1]

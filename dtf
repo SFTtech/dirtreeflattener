@@ -69,7 +69,7 @@ def unpack_dir(path, parent, parententry):
 			question = lambda to_path: "unpack '" + path + '/' + util.colored(entry, 36) + "' to '" + util.colored(os.path.relpath(to_path, path), 36) + "/'"
 			to_path_checker = lambda to_path: to_path == "" and "Path is empty" or os.path.exists(to_path) and "File exists: '" + to_path + "'" or True
 			while True:
-				to_path = util.confirm(question, args.default_yes, path, (to_path, "target directory", to_path_checker), args.always)
+				to_path = util.confirm(question, args.default_yes, path, (to_path, "target directory", to_path_checker, util.filename_completer().completer), args.always)
 				if to_path == False:
 					break
 
@@ -110,7 +110,7 @@ def flatten_dir(path, parent, parententry):
 		while True:
 			question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
 			newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and newname != parent + '/' + parententry and "File exists: '" + newname + "'" or True
-			newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker), args.always)
+			newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker, util.filename_completer().completer), args.always)
 			if newname == False:
 				break
 
