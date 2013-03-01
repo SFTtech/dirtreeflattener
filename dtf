@@ -1,0 +1,132 @@
+#!/usr/bin/python3
+#
+#directory tree flattener
+#unpacks archives and removes unneccesary subdirectory levels
+#designed for handling large filesystems
+#
+#(c) 2013 Michael Enßlin	<michael@ensslin.cc>
+#
+#gplv3 or higher, no warranty, blah, blubb
+
+import util
+import argparse
+import os
+import subprocess
+import readline
+
+parser = argparse.ArgumentParser(description="Flatten directory structure")
+parser.add_argument("--no-unpack", action="store_true", default=False, help="If set, no archive unpacking will be performed")
+parser.add_argument("--no-flatten", action="store_true", default=False, help="If set, no flattening will be performed")
+parser.add_argument("--remove-empty-dirs", action="store_true", default=False, help="If set, empty directories will be removed during flattening")
+parser.add_argument("--always", action="store_true", default=False, help="If set, all actions are performed without confirmation")
+parser.add_argument("--default-yes", action="store_true", default=False, help="If set, the default option is 'Yes' instead of 'No' in confirmation dialogs")
+parser.add_argument("--follow-symlinks", action="store_true", default=False, help="If set, symlinks will be resolved")
+parser.add_argument("--traverse-mount-points", action="store_true", default=False, help="If set, subdirectories will be handled even if from a different filesystem")
+parser.add_argument("rootdir", default='.', nargs='?', help="The root directory")
+args = parser.parse_args()
+
+#check the root directory
+rootdir = os.path.normpath(args.rootdir)
+if not os.path.isdir(rootdir):
+	util.fatal(rootdir + " is not a directory")
+rootdir_mount_point = util.find_mount_point(rootdir)
+
+def unpack_zip(archive, to):
+	print("unzip -o -d'" + to + "' '" + archive + "'")
+	return subprocess.call(['unzip', '-o', '-d' + to, '--', archive]) == 0
+
+def unpack_rar(archive, to):
+	if not os.path.isdir(to):
+		os.makedirs(to)
+
+	print("unrar x -y '" + archive + "' '" + to + "'")
+	return subprocess.call(['unrar', 'x', '-y', '--', archive, to]) == 0
+
+def unpack_tgz(archive, to):
+	if not os.path.isdir(to):
+		os.makedirs(to)
+
+	print("tar xzv --file='" + archive + "' -C'" + to + "'")
+	return subprocess.call(['tar', 'xzv', '--file=' + archive, '-C' + to]) == 0
+
+def unpack_dir(path, parent, parententry):
+	for entry in os.listdir(path):
+		name = path + "/" + entry
+		if not os.path.isfile(name):
+			continue
+
+		func = None
+		lowername = name.lower()
+		if lowername.endswith('.rar'):
+			func = unpack_rar
+		elif lowername.endswith('.zip'):
+			func = unpack_zip
+		elif lowername.endswith('.tar.gz') or lowername.endswith('.tgz'):
+			func = unpack_tgz
+
+		if func != None:
+			to_path = path + '/' + util.find_free_name(path, os.path.splitext(entry)[0])
+			question = lambda to_path: "unpack '" + path + '/' + util.colored(entry, 36) + "' to '" + util.colored(os.path.relpath(to_path, path), 36) + "/'"
+			to_path_checker = lambda to_path: to_path == "" and "Path is empty" or os.path.exists(to_path) and "File exists: '" + to_path + "'" or True
+			while True:
+				to_path = util.confirm(question, args.default_yes, path, (to_path, "target directory", to_path_checker), args.always)
+				if to_path == False:
+					break
+
+				if not func(name, to_path):
+					util.nonfatal("Could not unpack '" + name + "' to '" + to_path + "'")
+					if args.always:
+						break
+					else:
+						continue
+
+				util.rm(name)
+
+def flatten_dir(path, parent, parententry):
+	if parent == None or (args.traverse_mount_points and os.path.ismount(path)):
+		return
+
+	nameinparent = parent + "/" + parententry
+
+	files = os.listdir(path)
+	if len(files) == 0:
+		if args.remove_empty_dirs:
+			question = "Remove empty directory '" + path + "'"
+			if util.confirm(question, args.default_yes, parent, None, args.always):
+				util.rmdir(nameinparent)
+
+	elif len(files) == 1:
+		#move single entry of dir to parent dir, and delete dir
+		if util.names_similar(files[0], parententry):
+			#filename is similar to parent filename, do not concatenate
+			newname = files[0]
+		else:
+			newname = parententry + " - " + files[0]
+
+		#find a free new name for the file
+		newname = parent + "/" + util.find_free_name(parent, newname, [parententry])
+
+		#ready to move
+		while True:
+			question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
+			newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and newname != parent + '/' + parententry and "File exists: '" + newname + "'" or True
+			newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker), args.always)
+			if newname == False:
+				break
+
+			#if newname is equal to the dirname, we need to rename the dir first
+			if parent + '/' + parententry == newname:
+				newparententry = parent + "/" + util.find_free_name(parent, parententry)
+				util.mv(parent + '/' + parententry, parent + '/' + newparententry)
+				parententry = newparententry
+
+			#try the move
+			util.mv(parent + '/' + parententry + '/' + files[0], newname)
+			util.rmdir(parent + '/' + parententry)
+			break
+
+if not args.no_unpack:
+	util.walk(rootdir, None, None, unpack_dir, args.traverse_mount_points, args.follow_symlinks)
+
+if not args.no_flatten:
+	util.walk(rootdir, None, None, flatten_dir, args.traverse_mount_points, args.follow_symlinks)

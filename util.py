@@ -1,0 +1,241 @@
+#!/usr/bin/python3
+import os
+import sys
+import shutil
+import readline
+import types
+import subprocess
+
+def ansicolseq(colcode = ""):
+	return "\x1b[" + str(colcode) + "m"
+
+def colored(msg, colcode):
+	return ansicolseq(colcode) + msg + ansicolseq()
+
+def colprint(msg, colcode):
+	print(colored(msg, colcode))
+
+def redprint(msg):
+	colprint(msg, 31)
+
+def yellowprint(msg):
+	colprint(msg, 33)
+
+def cyanprint(msg):
+	colprint(msg, 36)
+
+def fatal(msg):
+	redprint(msg)
+	print_nonfatals("Nonfatal errors before this error:")
+	sys.exit(1)
+
+def nonfatal(msg):
+	yellowprint(msg)
+	nonfatals.append(msg)
+
+def info(msg):
+	cyanprint(msg)
+
+#store all non-fatal errors
+nonfatals = []
+def print_nonfatals(msg = "Nonfatal errors"):
+	if len(nonfatals) > 0:
+		print(msg)
+		for nonfatal in nonfatals:
+			print(nonfatal)
+
+def _pre_input_func(default):
+	readline.insert_text(default)
+	readline.redisplay()
+	sys.stdout.flush()
+
+def get_line(prompt = "> ", default = ""):
+	readline.parse_and_bind("tab: complete")
+	readline.set_completer()
+	readline.set_pre_input_hook(lambda: _pre_input_func(default))
+	line = input(prompt)
+	readline.set_pre_input_hook()
+	return line
+
+class _confirm_class:
+	def __init__(self, question, default_answer, path, changeable, always_yes):
+		self.question = question
+		self.default_answer = default_answer
+		self.path = path
+		self.changeable = changeable
+		self.always_yes = always_yes
+
+		if type(self.default_answer) == bool:
+			if self.default_answer:
+				self.default_answer = "yes"
+			else:
+				self.default_answer = "no"
+		else:
+			self.default_answer = str(self.default_answer)
+
+		self.options = []
+		self.options.append(("yes", self.option_yes))
+		self.options.append(("no", self.option_no))
+
+		if self.path != None:
+			self.options.append(("ls", self.option_ls))
+			self.options.append(("shell", self.option_shell))
+
+		if self.changeable == None:
+			self.val = True
+		else:
+			self.options.append(("change", self.option_change))
+			self.val, self.valname, self.valchecker = self.changeable
+
+		self.options.append(("quit", self.option_quit))
+
+		if self.default_answer not in map(lambda x: x[0], self.options):
+			self.default_answer = ""
+
+	def option_yes(self):
+		return self.val
+
+	def option_no(self):
+		return False
+
+	def option_ls(self):
+		print("ls -l '" + self.path + "'")
+		subprocess.call(["ls", "-l", "--", self.path])
+		return None
+
+	def option_shell(self):
+		print("Spawning shell.")
+		print("Type 'exit' to return to this prompt.")
+		oldpath = os.getcwd()
+		os.chdir(self.path)
+		os.system("$SHELL")
+		os.chdir(oldpath)
+		return None
+
+	def option_change(self):
+		try:
+			newval = get_line(self.valname + ": ", self.val)
+			newvalckres = self.valchecker(newval)
+			if newvalckres != True:
+				print("Illegal value: " + str(newvalckres))
+			else:
+				self.val = newval
+
+		except KeyboardInterrupt:
+			pass
+		except EOFError:
+			pass
+
+		return None
+
+	def option_quit(self):
+		exit(0)
+		return None
+
+	def get_prompt(self):
+		if type(self.question) == types.FunctionType:
+			prompt = self.question(self.val)
+		else:
+			prompt = str(self.question)
+
+		prompt += " ["
+		for optionname, optionfun in self.options:
+			initial = optionname[0]
+			if optionname == self.default_answer:
+				initial = initial.upper()
+			prompt += colored(initial, 1) + optionname[1:] + "/"
+
+		prompt = prompt[:-1] + "]? "
+		return prompt
+
+	def run(self):
+		if self.always_yes:
+			return self.val
+
+		while True:
+			res = self.run_once()
+			if res != None:
+				return res
+
+	def run_once(self):
+		try:
+			answer = get_line(self.get_prompt(), "")
+		except KeyboardInterrupt:
+			answer = "quit"
+		except EOFError:
+			answer = "quit"
+
+		if answer[-1:] == '\n':
+			answer = answer[:-1]
+
+		if answer == "":
+			answer = self.default_answer
+
+		answer = answer.lower()
+
+		for optionname, optionfun in self.options:
+			if optionname.startswith(answer):
+				return optionfun()
+
+		print("Illegal answer: " + answer)
+		return None
+
+def confirm(question, default_answer = True, path = None, changeable = None, always_yes = False):
+	cc = _confirm_class(question, default_answer, path, changeable, always_yes)
+	return cc.run()
+
+def find_mount_point(path):
+	path = os.path.realpath(path)
+	while not os.path.ismount(path):
+		path = os.path.dirname(path)
+	return path
+
+def walk(path, parent, parententry, func, traverse_mount_points = False, follow_symlinks=False, parents=set()):
+	for entry in os.listdir(path):
+		newpath = path + '/' + entry
+		if os.path.isdir(newpath):
+			if os.path.islink(newpath):
+				realnewpath = os.path.realpath(newpath)
+				if follow_symlinks and (traverse_mount_points or find_mount_point(realnewpath) == rootdir_mount_point):
+					if realnewpath in parents:
+						info("loop detected: " + newpath + " -> " + realnewpath)
+					else:
+						walk(realnewpath, path, entry, func, traverse_mount_points, follow_symlinks, parents.union({path}))
+			else:
+				newpath = os.path.normpath(newpath)
+				if traverse_mount_points or not os.path.ismount(newpath):
+					walk(newpath, path, entry, func, traverse_mount_points, follow_symlinks, parents.union({path}))
+	
+	func(path, parent, parententry)
+
+def rmdir(path):
+	if os.path.islink(path):
+		print("rm '" + path + "'")
+		os.remove(path)
+	else:
+		print("rmdir '" + path + "'")
+		os.rmdir(path)
+
+def rm(path):	
+	print("rm '" + path + "'")
+	os.remove(path)
+
+def mv(frompath, topath):
+	print("mv '" + frompath + "' '" + topath + "'")
+	shutil.move(frompath, topath)
+
+def names_similar(a, b):
+	return a.replace(' ', '').replace('_', '').lower() == b.replace(' ', '').replace('_', '').lower()
+
+def alt_name(path, i):
+	return path + "_" + str(i)
+
+#allowed contains a list of names that should be considered free, even if they are not
+def find_free_name(path, name, allowed = []):
+	if name in allowed or not os.path.exists(path + "/" + name):
+		return name
+	else:
+		i = 0
+		while not name in allowed and os.path.exists(path + "/" + alt_name(name, i)):
+			i += 1
+		return alt_name(name, i)
