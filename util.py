@@ -123,8 +123,8 @@ class _confirm_class:
 		return False
 
 	def option_ls(self):
-		print("ls -l '" + self.path + "'")
-		subprocess.call(["ls", "-l", "--", self.path])
+		print("ls -la '" + self.path + "'")
+		subprocess.call(["ls", "-la", "--color=auto", "--", self.path])
 		return None
 
 	def option_shell(self):

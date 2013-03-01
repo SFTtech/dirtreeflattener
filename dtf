@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #
 #directory tree flattener
-#unpacks archives and removes unneccesary subdirectory levels
+#unpacks archives and removes unnecessary subdirectory levels
 #designed for handling large filesystems
 #
 #(c) 2013 Michael Enßlin	<michael@ensslin.cc>
@@ -107,20 +107,17 @@ def flatten_dir(path, parent, parententry):
 		newname = parent + "/" + util.find_free_name(parent, newname, [parententry])
 
 		#ready to move
-		while True:
-			question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
-			newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and newname != parent + '/' + parententry and "File exists: '" + newname + "'" or True
-			newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker, util.filename_completer().completer), args.always)
-			if newname == False:
-				break
-
-			#if newname is equal to the dirname, we need to rename the dir first
+		question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
+		newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and newname != parent + '/' + parententry and "File exists: '" + newname + "'" or True
+		newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker, util.filename_completer().completer), args.always)
+		if newname != False:
+			#if newname is equal to the dirname, we need to rename the dir first ('mv a b', 'mv b/a a', 'rmdir b')
 			if parent + '/' + parententry == newname:
 				newparententry = parent + "/" + util.find_free_name(parent, parententry)
 				util.mv(parent + '/' + parententry, parent + '/' + newparententry)
 				parententry = newparententry
 
-			#try the move
+			#move
 			util.mv(parent + '/' + parententry + '/' + files[0], newname)
 			util.rmdir(parent + '/' + parententry)
 			break
