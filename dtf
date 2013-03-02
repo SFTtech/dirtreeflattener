@@ -12,7 +12,7 @@ import util
 import argparse
 import os
 import subprocess
-import readline
+import shutil
 
 parser = argparse.ArgumentParser(description="Flatten directory structure")
 parser.add_argument("--no-unpack", action="store_true", default=False, help="If set, no archive unpacking will be performed")
@@ -73,6 +73,8 @@ def unpack_dir(path, parent, parententry):
 				if to_path == False:
 					break
 
+				to_path = os.path.normpath(to_path)
+
 				if not func(name, to_path):
 					util.nonfatal("Could not unpack '" + name + "' to '" + to_path + "'")
 					if args.always:
@@ -106,20 +108,34 @@ def flatten_dir(path, parent, parententry):
 		#find a free new name for the file
 		newname = parent + "/" + util.find_free_name(parent, newname, [parententry])
 
-		#ready to move
-		question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
-		newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and newname != parent + '/' + parententry and "File exists: '" + newname + "'" or True
-		newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker, util.filename_completer().completer), args.always)
-		if newname != False:
+		while True:
+			question = lambda newname: "Move '" + parent + "/" + util.colored(parententry + "/" + files[0], 36) + " to '" + util.colored(os.path.relpath(newname, parent), 36) + "'" 
+			newname_checker = lambda newname: newname == "" and "Path is empty" or os.path.exists(newname) and os.path.normpath(newname) != parent + '/' + parententry and "File exists: '" + newname + "'" or True
+			newname = util.confirm(question, args.default_yes, parent, (newname, "move to", newname_checker, util.filename_completer().completer), args.always)
+			if newname == False:
+				break
+			newname = os.path.normpath(newname)
+
 			#if newname is equal to the dirname, we need to rename the dir first ('mv a b', 'mv b/a a', 'rmdir b')
 			if parent + '/' + parententry == newname:
-				newparententry = parent + "/" + util.find_free_name(parent, parententry)
+				newparententry = util.find_free_name(parent, parententry)
 				util.mv(parent + '/' + parententry, parent + '/' + newparententry)
 				parententry = newparententry
+
+			#check whether the file would be moved into a subdirectory of its old location
+			if shutil._destinsrc(parent + '/' + parententry, newname):
+				print("Can not move file to a subdirectory of its old location")
+				continue
+
+			#if the parent directory of newname does not exist yet, create it
+			newdirname = os.path.dirname(newname)
+			if not os.path.exists(newdirname):
+				os.makedirs(newdirname)
 
 			#move
 			util.mv(parent + '/' + parententry + '/' + files[0], newname)
 			util.rmdir(parent + '/' + parententry)
+
 			break
 
 if not args.no_unpack:
