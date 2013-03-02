@@ -49,12 +49,28 @@ def _pre_input_func(default):
 	readline.redisplay()
 	sys.stdout.flush()
 
+def surround_ansi_escapes(prompt, start = "\x01", end = "\x02"):
+	escaped = False
+	result = ""
+
+	for c in prompt:
+		if c == "\x1b" and not escaped:
+			result += start + c
+			escaped = True
+		elif c.isalpha() and escaped:
+			result += c + end
+			escaped = False
+		else:
+			result += c
+
+	return result
+
 def get_line(prompt = "> ", default = "", completer = None):
 	readline.parse_and_bind("tab: complete")
 	readline.set_completer(completer)
 	readline.set_completer_delims("/")
 	readline.set_pre_input_hook(lambda: _pre_input_func(default))
-	line = input(prompt)
+	line = input(surround_ansi_escapes(prompt))
 	readline.set_pre_input_hook()
 	return line
 
