@@ -73,12 +73,9 @@ class filename_completer():
 			return None
 
 class _confirm_class:
-	def __init__(self, question, default_answer, path, changeable, always_yes):
-		self.question = question
-		self.default_answer = default_answer
-		self.path = path
-		self.changeable = changeable
-		self.always_yes = always_yes
+	def __init__(self, **kwargs):
+		#ultra-lazy version of storing all the parameters
+		self.__dict__.update(kwargs)
 
 		if type(self.default_answer) == bool:
 			if self.default_answer:
@@ -89,25 +86,30 @@ class _confirm_class:
 			self.default_answer = str(self.default_answer)
 
 		self.options = []
+		#allow the user to reply yes/no. no means returning False, yes means returning val.
 		self.options.append(("yes", self.option_yes))
 		self.options.append(("no", self.option_no))
 
+		#if a path is passed, allow the user to list it and launch a shell in it
 		if self.path != None:
 			self.options.append(("ls", self.option_ls))
 			self.options.append(("shell", self.option_shell))
 
-		if self.changeable == None:
-			self.val = True
-		else:
+		#if a valname is passed, allow the user to change val
+		if self.valname != None:
 			self.options.append(("change", self.option_change))
-			self.val, self.valname, self.valchecker, self.valcompleter = self.changeable
 
+		#if a testfun is passed, allow the user to run it
+		if self.testfun != None:
+			self.options.append(("test", self.option_test))
+
+		#allow the user to quit
 		self.options.append(("quit", self.option_quit))
 
 		if self.default_answer not in map(lambda x: x[0], self.options):
 			self.default_answer = ""
 
-	def option_completer(self, text, state):
+	def completer(self, text, state):
 		if state == 0:
 			self.complist = list(filter(lambda on: on.startswith(text), map(lambda o: o[0], self.options)))
 
@@ -139,7 +141,11 @@ class _confirm_class:
 	def option_change(self):
 		try:
 			newval = get_line(self.valname + ": ", self.val, self.valcompleter)
-			newvalckres = self.valchecker(newval)
+			if self.valchecker != None:
+				newvalckres = self.valchecker(newval)
+			else:
+				newvalckres = True
+
 			if newvalckres != True:
 				print("Illegal value: " + str(newvalckres))
 			else:
@@ -151,6 +157,12 @@ class _confirm_class:
 		except EOFError:
 			print("")
 			pass
+
+		return None
+
+	def option_test(self):
+		if not self.testfun():
+			print("Test failed")
 
 		return None
 
@@ -185,7 +197,7 @@ class _confirm_class:
 
 	def run_once(self):
 		try:
-			answer = get_line(self.get_prompt(), "", self.option_completer)
+			answer = get_line(self.get_prompt(), "", self.completer)
 		except KeyboardInterrupt:
 			answer = "quit"
 			print("")
@@ -208,8 +220,8 @@ class _confirm_class:
 		print("Illegal answer: " + answer)
 		return None
 
-def confirm(question, default_answer = True, path = None, changeable = None, always_yes = False):
-	cc = _confirm_class(question, default_answer, path, changeable, always_yes)
+def confirm(question, default_answer = True, path = None, val = True, valname = None, valchecker = None, valcompleter = None, always_yes = False, testfun = None):
+	cc = _confirm_class(**locals())
 	return cc.run()
 
 def find_mount_point(path):
