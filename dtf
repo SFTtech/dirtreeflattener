@@ -22,6 +22,7 @@ parser.add_argument("--always", action="store_true", default=False, help="If set
 parser.add_argument("--default-yes", action="store_true", default=False, help="If set, the default option is 'Yes' instead of 'No' in confirmation dialogs")
 parser.add_argument("--follow-symlinks", action="store_true", default=False, help="If set, symlinks will be resolved")
 parser.add_argument("--traverse-mount-points", action="store_true", default=False, help="If set, subdirectories will be handled even if from a different filesystem")
+parser.add_argument("--depth", type=int, default=-1, help="Specify depth of search")
 parser.add_argument("rootdir", default='.', nargs='?', help="The root directory")
 args = parser.parse_args()
 
@@ -139,7 +140,7 @@ def flatten_dir(path, parent, parententry):
 			break
 
 if not args.no_unpack:
-	util.walk(rootdir, None, None, unpack_dir, args.traverse_mount_points, args.follow_symlinks)
+	util.walk(rootdir, None, None, unpack_dir, args.traverse_mount_points, args.follow_symlinks, args.depth)
 
 if not args.no_flatten:
-	util.walk(rootdir, None, None, flatten_dir, args.traverse_mount_points, args.follow_symlinks)
+	util.walk(rootdir, None, None, flatten_dir, args.traverse_mount_points, args.follow_symlinks, args.depth)

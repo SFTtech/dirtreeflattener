@@ -218,21 +218,22 @@ def find_mount_point(path):
 		path = os.path.dirname(path)
 	return path
 
-def walk(path, parent, parententry, func, traverse_mount_points = False, follow_symlinks=False, parents=set()):
-	for entry in os.listdir(path):
-		newpath = path + '/' + entry
-		if os.path.isdir(newpath):
-			if os.path.islink(newpath):
-				realnewpath = os.path.realpath(newpath)
-				if follow_symlinks and (traverse_mount_points or find_mount_point(realnewpath) == rootdir_mount_point):
-					if realnewpath in parents:
-						info("loop detected: " + newpath + " -> " + realnewpath)
-					else:
-						walk(realnewpath, path, entry, func, traverse_mount_points, follow_symlinks, parents.union({path}))
-			else:
-				newpath = os.path.normpath(newpath)
-				if traverse_mount_points or not os.path.ismount(newpath):
-					walk(newpath, path, entry, func, traverse_mount_points, follow_symlinks, parents.union({path}))
+def walk(path, parent, parententry, func, traverse_mount_points = False, follow_symlinks=False, depth=-1, parents=set()):
+	if depth != 0:
+		for entry in os.listdir(path):
+			newpath = path + '/' + entry
+			if os.path.isdir(newpath):
+				if os.path.islink(newpath):
+					realnewpath = os.path.realpath(newpath)
+					if follow_symlinks and (traverse_mount_points or find_mount_point(realnewpath) == rootdir_mount_point):
+						if realnewpath in parents:
+							info("loop detected: " + newpath + " -> " + realnewpath)
+						else:
+							walk(realnewpath, path, entry, func, traverse_mount_points, follow_symlinks, depth - 1, parents.union({path}))
+				else:
+					newpath = os.path.normpath(newpath)
+					if traverse_mount_points or not os.path.ismount(newpath):
+						walk(newpath, path, entry, func, traverse_mount_points, follow_symlinks, depth - 1, parents.union({path}))
 	
 	func(path, parent, parententry)
 
