@@ -36,7 +36,7 @@ def nonfatal(msg):
 def info(msg):
 	cyanprint(msg)
 
-#store all non-fatal errors
+#stores all non-fatal errors
 nonfatals = []
 def print_nonfatals(msg = "Nonfatal errors"):
 	if len(nonfatals) > 0:
@@ -75,10 +75,10 @@ def get_line(prompt = "> ", default = "", completer = None):
 	return line
 
 class filename_completer():
-	def completer(self, text, state):
+	def __call__(self, text, state):
 		if state == 0:
 			try:
-				dirname = os.path.dirname(readline.get_line_buffer())
+				dirname = dirname(readline.get_line_buffer())
 				self.complist = list(filter(lambda fname: fname.startswith(text), map(lambda fname: os.path.isdir(dirname + '/' + fname) and fname + '/' or fname, os.listdir(dirname))))
 			except Exception as e:
 				self.complist = []
@@ -246,7 +246,7 @@ def find_mount_point(path):
 		path = os.path.dirname(path)
 	return path
 
-def walk(path, parent, parententry, func, traverse_mount_points = False, follow_symlinks=False, depth=-1, parents=set()):
+def walk(path, func, traverse_mount_points = False, follow_symlinks=False, depth=-1, parent = None, parententry = None, parents=set()):
 	if depth != 0:
 		for entry in os.listdir(path):
 			newpath = path + '/' + entry
@@ -257,11 +257,11 @@ def walk(path, parent, parententry, func, traverse_mount_points = False, follow_
 						if realnewpath in parents:
 							info("loop detected: " + newpath + " -> " + realnewpath)
 						else:
-							walk(realnewpath, path, entry, func, traverse_mount_points, follow_symlinks, depth - 1, parents.union({path}))
+							walk(realnewpath, func, traverse_mount_points = traverse_mount_points, follow_symlinks = follow_symlinks, depth = depth - 1, parent = path, parententry = entry, parents = parents.union({path}))
 				else:
 					newpath = os.path.normpath(newpath)
 					if traverse_mount_points or not os.path.ismount(newpath):
-						walk(newpath, path, entry, func, traverse_mount_points, follow_symlinks, depth - 1, parents.union({path}))
+						walk(newpath, func, traverse_mount_points = traverse_mount_points, follow_symlinks = follow_symlinks, depth = depth - 1, parent = path, parententry = entry, parents = parents.union({path}))
 	
 	func(path, parent, parententry)
 
@@ -296,3 +296,10 @@ def find_free_name(path, name, allowed = []):
 		while not name in allowed and os.path.exists(path + "/" + alt_name(name, i)):
 			i += 1
 		return alt_name(name, i)
+
+def dirname(path):
+	dirname = os.path.dirname(path)
+	if dirname == "":
+		return "."
+	else:
+		return dirname
